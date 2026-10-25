@@ -22,11 +22,15 @@ pip install "io-policy-engine @ git+https://github.com/112345brian/io-policy"
 - `LocalReadProbe`, `LocalReadQuery`, `LocalAnswer`: the protocol for answering a read from local state. The probe
   gets one `LocalReadQuery` (method, table, params, class, headers, registered read name, and `degraded`: the class is
   over its allowance, so a stale answer beats none).
-- `Allowance[C]`, `AllowanceReader[C]`, `AllowanceStatus`, `allowance_exempt`: a rolling byte allowance (total, window,
-  per-class shares, a reserve fraction for unmeasured traffic). The `AllowanceReader` you bind supplies
-  `spent_wire_bytes(class, window)`; `RequestFacts.allowance` carries the resulting status into `eligibility`, which
-  serves an over-allowance request locally if it has a local answer and refuses it otherwise. Writes and
-  `NEVER_STALE` classes are exempt.
+- `Allowance[C]`, `AllowanceReader[C]`, `AllowanceStatus`, `AllowanceMode`, `allowance_exempt`, `allowance_limited`: a
+  rolling byte allowance (total, window, per-class shares, a reserve fraction for unmeasured traffic). The
+  `AllowanceReader` you bind supplies `spent_wire_bytes(class, window)`; `RequestFacts.allowance` carries the resulting
+  status into `eligibility`. A class is over only when **its own** spend reaches **its own** share: the total (which
+  includes spend no class can be blamed for) is a reporting figure, never a trigger. An over class is served locally
+  if it has a local answer. With none, `AllowanceMode.WARN` (the default, `RequestFacts.allowance_mode`) allows the
+  request with the `ALLOWANCE_EXCEEDED` finding for the caller to record; `AllowanceMode.ENFORCE` refuses it. Only
+  *limited* classes are affected: writes and `NEVER_STALE` classes are exempt (`ClassPolicy.allowance_exempt`), and
+  small or correctness-critical reads are essential (`ClassPolicy.allowance_essential`): counted, never held back.
 - `RequestBudget[C]`: thread-safe per-class byte accounting. `RequestRefused`: exception carrying a refused `Decision`.
 
 ## The pattern: a closed Enum whose values are `ClassPolicy`

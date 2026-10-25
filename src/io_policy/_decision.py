@@ -6,11 +6,15 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Generic, Protocol, TypeVar
 
-from io_policy._allowance import AllowanceStatus
+from io_policy._allowance import AllowanceMode, AllowanceStatus
 from io_policy._class_policy import Guard, class_policy
 
 C = TypeVar("C", bound=Enum)
 C_contra = TypeVar("C_contra", bound=Enum, contravariant=True)
+
+
+# The finding on an ALLOWED decision whose class is over its allowance (warn mode): sent anyway, and recorded.
+ALLOWANCE_EXCEEDED = "allowance_exceeded"
 
 
 class Outcome(Enum):
@@ -90,6 +94,7 @@ class RequestFacts(Generic[C]):
     spent_bytes: int = 0
     byte_cap: int | None = None
     allowance: AllowanceStatus | None = None
+    allowance_mode: AllowanceMode = AllowanceMode.WARN
 
 
 def eligibility(
@@ -99,6 +104,10 @@ def eligibility(
 ) -> Decision[C]:
     """Decide from the request's class whether it may reach the network. The one decision function.
 
+    A class over its allowance (``AllowanceStatus.over``; only limited classes -- see
+    ``ClassPolicy.allowance_limited``) is served from a local answer when there is one. With none, ``WARN`` (the
+    default) sends the request and attaches the ``ALLOWANCE_EXCEEDED`` finding; ``ENFORCE`` refuses it.
+
     ``advise`` lets the caller attach non-blocking findings to an ALLOWED decision (guard violations that do not
     refuse yet); the engine knows no class by name, so anything class-specific lives there.
     """
@@ -107,11 +116,11 @@ def eligibility(
         return Decision(Outcome.REFUSED, None, f"unclassified request {facts.method} {facts.table}: no class covers it")
     policy = class_policy(io_class)
     guards = policy.guards
-    over = facts.allowance if facts.allowance is not None and facts.allowance.over and not policy.allowance_exempt else None
+    over = facts.allowance if facts.allowance is not None and facts.allowance.over and policy.allowance_limited else None
     if policy.may_serve_local and facts.local is not None and Guard.NEVER_STALE not in guards:
         reason = "answered from local state" if over is None else f"over allowance, degraded to local state ({over.describe()})"
         return Decision(Outcome.SERVED_LOCAL, io_class, reason, guards, payload=facts.local.payload)
-    if over is not None:
+    if over is not None and facts.allowance_mode is AllowanceMode.ENFORCE:
         return Decision(
             Outcome.REFUSED, io_class,
             f"{policy.label} is over its byte allowance and has no local answer ({over.describe()})", guards,
@@ -123,4 +132,10 @@ def eligibility(
             guards,
         )
     findings = tuple(advise(facts)) if advise is not None else ()
+    if over is not None:  # warn mode: the request goes out, and the overrun is a finding the caller records
+        return Decision(
+            Outcome.ALLOWED, io_class,
+            f"{policy.label} is over its byte allowance, no local answer; sending anyway ({over.describe()})",
+            guards, (ALLOWANCE_EXCEEDED, *findings),
+        )
     return Decision(Outcome.ALLOWED, io_class, "eligible", guards, findings)

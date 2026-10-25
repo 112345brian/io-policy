@@ -9,9 +9,17 @@ It knows no table, vendor or storage layout, and imports nothing but the standar
 
 This ``__init__`` is the engine's deliberate public API; the implementation lives in the underscore modules.
 """
-from io_policy._allowance import Allowance, AllowanceReader, AllowanceStatus, allowance_exempt
+from io_policy._allowance import (
+    Allowance,
+    AllowanceMode,
+    AllowanceReader,
+    AllowanceStatus,
+    allowance_exempt,
+    allowance_limited,
+)
 from io_policy._class_policy import ClassPolicy, Guard, class_policy
 from io_policy._decision import (
+    ALLOWANCE_EXCEEDED,
     Decision,
     LocalAnswer,
     LocalReadProbe,
@@ -24,7 +32,9 @@ from io_policy._decision import (
 from io_policy._request_budget import RequestBudget
 
 __all__ = [
+    "ALLOWANCE_EXCEEDED",
     "Allowance",
+    "AllowanceMode",
     "AllowanceReader",
     "AllowanceStatus",
     "ClassPolicy",
@@ -39,5 +49,6 @@ __all__ = [
     "RequestRefused",
     "class_policy",
     "allowance_exempt",
+    "allowance_limited",
     "eligibility",
 ]

@@ -7,7 +7,9 @@ from enum import Enum
 import pytest
 
 from io_policy import (
+    ALLOWANCE_EXCEEDED,
     Allowance,
+    AllowanceMode,
     AllowanceStatus,
     ClassPolicy,
     Guard,
@@ -15,6 +17,7 @@ from io_policy import (
     Outcome,
     RequestFacts,
     allowance_exempt,
+    allowance_limited,
     eligibility,
 )
 
@@ -27,6 +30,9 @@ class Toy(Enum):
     LOG = ClassPolicy("log", "log read", frozenset({G.LOCAL_FIRST_PROBE}), may_serve_local=True)
     STATE = ClassPolicy("state", "never stale", frozenset({G.NEVER_STALE}))
     PUT = ClassPolicy("put", "write", frozenset({G.RETURN_MINIMAL}), is_write=True)
+    LOOKUP = ClassPolicy(
+        "lookup", "small essential read", frozenset({G.LOCAL_FIRST_PROBE}), may_serve_local=True, allowance_essential=True,
+    )
 
 
 def default_allowance(total: int = 5_000_000_000, *, reserve_fraction: float = 0.0) -> Allowance[Toy]:
@@ -49,10 +55,10 @@ class FakeReader:
         return self.per_class.get(io_class, 0)
 
 
-def test_every_non_exempt_class_has_a_share_and_exempt_ones_are_writes_and_never_stale_reads():
+def test_every_limited_class_has_a_share_and_exempt_ones_are_writes_and_never_stale_reads():
     a = default_allowance()
     assert sum(a.shares.values()) <= 1.0
-    assert {c for c in Toy if a.cap(c) > 0} == {c for c in Toy if not allowance_exempt(c)}
+    assert {c for c in Toy if a.cap(c) > 0} == {c for c in Toy if allowance_limited(c)} == {Toy.BULK, Toy.LOG}
     assert {c for c in Toy if allowance_exempt(c)} == {Toy.STATE, Toy.PUT}
 
 
@@ -75,22 +81,40 @@ def test_a_nonsensical_allowance_is_refused_at_construction(bad):
         Allowance(**bad)
 
 
-def test_a_zero_cap_is_over_at_once_and_a_spent_total_trips_every_class():
+def test_a_zero_cap_is_over_at_once_and_only_a_class_s_own_spend_trips_it():
     zero = Allowance(0, WINDOW, {Toy.BULK: 1.0})
     assert zero.status(Toy.BULK, FakeReader()).over
-    assert default_allowance(1000).status(Toy.LOG, FakeReader({Toy.BULK: 1000})).over  # the total is spent
+    assert not default_allowance(1000).status(Toy.LOG, FakeReader({Toy.BULK: 1000})).over  # the total is no trigger
+    assert default_allowance(1000).status(Toy.BULK, FakeReader({Toy.BULK: 550})).over
     assert not default_allowance(1000).status(Toy.LOG, FakeReader({Toy.LOG: 5})).over
     assert _status(spent=100, cap=100).remaining == 0 and _status(spent=500, cap=100).remaining == 0
 
 
-def test_over_allowance_degrades_to_a_local_answer_else_refuses():
+def test_over_allowance_degrades_to_a_local_answer_else_warns_by_default():
     over = _status(spent=200)
     served = eligibility(RequestFacts("GET", "t", Toy.BULK, local=LocalAnswer([1]), allowance=over))
     assert served.outcome is Outcome.SERVED_LOCAL and served.payload == [1] and "over allowance" in served.reason
-    refused = eligibility(RequestFacts("GET", "t", Toy.BULK, allowance=over))
-    assert refused.outcome is Outcome.REFUSED and "allowance" in refused.reason
+    warned = eligibility(RequestFacts("GET", "t", Toy.BULK, allowance=over))
+    assert warned.outcome is Outcome.ALLOWED and ALLOWANCE_EXCEEDED in warned.findings
     assert eligibility(RequestFacts("GET", "t", Toy.BULK, allowance=_status(spent=1))).outcome is Outcome.ALLOWED
     assert eligibility(RequestFacts("GET", "t", Toy.BULK)).outcome is Outcome.ALLOWED
+
+
+def test_enforce_mode_refuses_an_over_allowance_request_with_no_local_answer():
+    refused = eligibility(RequestFacts(
+        "GET", "t", Toy.BULK, allowance=_status(spent=200), allowance_mode=AllowanceMode.ENFORCE,
+    ))
+    assert refused.outcome is Outcome.REFUSED and "allowance" in refused.reason
+
+
+def test_an_essential_class_is_counted_but_never_degraded_or_refused():
+    over = _status(spent=10**9)
+    decision = eligibility(RequestFacts(
+        "GET", "t", Toy.LOOKUP, allowance=over, allowance_mode=AllowanceMode.ENFORCE,
+    ))
+    assert decision.outcome is Outcome.ALLOWED and ALLOWANCE_EXCEEDED not in decision.findings
+    served = eligibility(RequestFacts("GET", "t", Toy.LOOKUP, local=LocalAnswer("x"), allowance=over))
+    assert served.outcome is Outcome.SERVED_LOCAL and "over allowance" not in served.reason
 
 
 @pytest.mark.parametrize("cls,method,prefer", [(Toy.STATE, "GET", None), (Toy.PUT, "POST", "return=minimal")])

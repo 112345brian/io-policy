@@ -23,7 +23,7 @@ class Guard(Enum):
 class ClassPolicy:
     """What a class is allowed to do and must do. Each member of the caller's class enum has one as its value."""
 
-    label: str  # a stable string identifying the class in logs and metrics
+    label: str  # a stable string identifying the class in ledgers and logs
     summary: str
     guards: frozenset[Guard]
     is_write: bool = False
@@ -31,11 +31,20 @@ class ClassPolicy:
     may_serve_local: bool = False
     # Bytes this class may receive per process before further requests are refused (None: uncapped).
     process_byte_budget: int | None = None
+    # Small, user-facing or correctness-critical (a by-id lookup, an id set, a log read): it still counts toward
+    # the spend and shows in the report, but it is never refused or degraded for allowance -- an allowance that
+    # takes a page or a batch dedupe pass down is an outage, not a saving. Only the bulk classes are limited.
+    allowance_essential: bool = False
 
     @property
     def allowance_exempt(self) -> bool:
         """Never refused or degraded for byte allowance: a write, or a class that must not be answered stale."""
         return self.is_write or Guard.NEVER_STALE in self.guards
+
+    @property
+    def allowance_limited(self) -> bool:
+        """The allowance can degrade or (in enforce mode) refuse this class: neither exempt nor essential."""
+        return not self.allowance_exempt and not self.allowance_essential
 
     def __post_init__(self) -> None:
         # A policy that contradicts itself is refused where it is built, not when a request happens to hit it.

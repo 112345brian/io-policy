@@ -1,8 +1,12 @@
 """A rolling byte allowance per request class: the arithmetic, and the port that supplies "bytes spent so far".
 
-Pure. The engine does not know where the spent figure comes from; an ``AllowanceReader`` adapter (a log, a
-meter, a billing API) supplies it. Exempt classes (writes, never-stale reads) are counted in the total but never
-degraded or refused for allowance: losing a user's own state to save bytes is worse than the bytes.
+Pure. The engine does not know where the spent figure comes from; an ``AllowanceReader`` adapter (a ledger, a
+meter, a billing API) supplies it. Exempt classes (writes, never-stale reads) and essential classes (small,
+user-facing or correctness-critical reads) are counted in the total but never degraded or refused for allowance:
+losing a user's own state, or a page, to save bytes is worse than the bytes.
+
+A class is *over* only for what it spent itself (see ``AllowanceStatus.over``). Spend no class can be blamed for --
+history from before classes were recorded, or exempt traffic -- is in the total but in no class's own figure.
 """
 from __future__ import annotations
 
@@ -13,6 +17,14 @@ from enum import Enum
 from typing import Generic, Protocol, TypeVar
 
 from io_policy._class_policy import class_policy
+
+
+class AllowanceMode(Enum):
+    """What happens to a limited class that is over its allowance and has no local answer."""
+
+    WARN = "warn"        # the default: observe and record the overrun, serve a kept page if there is one, never refuse
+    ENFORCE = "enforce"  # the user's hard mode: refuse that request (only bulk classes can reach it)
+
 
 C = TypeVar("C", bound=Enum)
 C_contra = TypeVar("C_contra", bound=Enum, contravariant=True)
@@ -41,12 +53,21 @@ class AllowanceStatus:
 
     @property
     def over(self) -> bool:
-        return self.spent >= self.cap or self.total_spent >= self.total_cap
+        """True when this class has spent its own share.
+
+        The total is deliberately not a trigger. Spend no class can be blamed for -- ledger rows from before
+        classes were recorded, exempt traffic (writes, user state, probes) -- is in ``total_spent`` but in no
+        class's ``spent``; letting the total trip every class would refuse a class that has spent nothing (a
+        deployment on top of a legacy ledger did exactly that). The class shares already sum to less than the
+        usable total, so classes that stay inside their shares cannot exhaust it; the total is what the report
+        and ``describe`` show.
+        """
+        return self.spent >= self.cap
 
     @property
     def remaining(self) -> int:
-        """Bytes left before either limit trips (never negative)."""
-        return max(0, min(self.cap - self.spent, self.total_cap - self.total_spent))
+        """Bytes left in this class's share (never negative)."""
+        return max(0, self.cap - self.spent)
 
     def describe(self) -> str:
         return (
@@ -99,3 +120,8 @@ class Allowance(Generic[C]):
 def allowance_exempt(io_class: Enum) -> bool:
     """Writes and never-stale classes are never refused or degraded for allowance."""
     return class_policy(io_class).allowance_exempt
+
+
+def allowance_limited(io_class: Enum) -> bool:
+    """The allowance applies to this class: not exempt, and not an essential (small, correctness-critical) read."""
+    return class_policy(io_class).allowance_limited

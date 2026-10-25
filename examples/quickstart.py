@@ -6,6 +6,7 @@ from enum import Enum
 
 from io_policy import (
     Allowance,
+    AllowanceMode,
     ClassPolicy,
     Guard,
     LocalAnswer,
@@ -48,14 +49,14 @@ probe: LocalReadProbe[Net] = Cache({"items": [{"id": 1}]})
 allowance = Allowance(total_bytes=1000, window=timedelta(days=30), shares={Net.LISTING: 1.0})
 
 
-def decide(table: str, spent: int) -> str:
+def decide(table: str, spent: int, mode: AllowanceMode = AllowanceMode.WARN) -> str:
     query = LocalReadQuery("GET", table, None, Net.LISTING)
     status = allowance.status(Net.LISTING, Meter(spent))
-    facts = RequestFacts("GET", table, Net.LISTING, local=probe.answer(query), allowance=status)
+    facts = RequestFacts("GET", table, Net.LISTING, local=probe.answer(query), allowance=status, allowance_mode=mode)
     return eligibility(facts).outcome.value
 
 
-results = [decide("other", 0), decide("items", 2000), decide("other", 2000)]
+results = [decide("other", 0), decide("items", 2000), decide("other", 2000, AllowanceMode.ENFORCE)]
 
 if __name__ == "__main__":
     print(results)
