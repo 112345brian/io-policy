@@ -1,0 +1,43 @@
+"""A generic request-eligibility engine: which I/O may reach the network, under which guards. No app knowledge.
+
+The caller supplies a closed ``Enum`` of request classes whose member values are ``ClassPolicy`` objects, a way to
+classify a request into one of those members, and (optionally) a bound ``LocalReadProbe``. The engine turns the
+class's policy plus the request's facts into one explicit ``Decision`` (allowed / served local / refused)
+and does the arithmetic of a rolling per-class byte allowance.
+It knows no table, vendor or storage layout, and imports nothing but the standard library
+(``tests/test_engine.py`` enforces that).
+
+This ``__init__`` is the engine's deliberate public API; the implementation lives in the underscore modules.
+"""
+from io_policy._allowance import Allowance, AllowanceReader, AllowanceStatus, allowance_exempt
+from io_policy._class_policy import ClassPolicy, Guard, class_policy
+from io_policy._decision import (
+    Decision,
+    LocalAnswer,
+    LocalReadProbe,
+    LocalReadQuery,
+    Outcome,
+    RequestFacts,
+    RequestRefused,
+    eligibility,
+)
+from io_policy._request_budget import RequestBudget
+
+__all__ = [
+    "Allowance",
+    "AllowanceReader",
+    "AllowanceStatus",
+    "ClassPolicy",
+    "Decision",
+    "Guard",
+    "LocalAnswer",
+    "LocalReadProbe",
+    "LocalReadQuery",
+    "Outcome",
+    "RequestBudget",
+    "RequestFacts",
+    "RequestRefused",
+    "class_policy",
+    "allowance_exempt",
+    "eligibility",
+]

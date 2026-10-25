@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "io-policy-engine"
+version = "0.1.0"
+description = "A dependency-free engine that decides which I/O requests may reach the network, under which guards and byte allowance."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Brian Powers" }]
+keywords = ["io", "egress", "policy", "allowance", "ports-and-adapters", "onion-architecture"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+]
+
+[project.urls]
+Homepage = "https://github.com/112345brian/io-policy"
+Repository = "https://github.com/112345brian/io-policy"
+Issues = "https://github.com/112345brian/io-policy/issues"
+
+[tool.setuptools]
+packages = ["io_policy"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.package-data]
+io_policy = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 130
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
