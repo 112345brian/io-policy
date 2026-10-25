@@ -15,7 +15,7 @@ The GitHub repository is `112345brian/io-policy` (public). The PyPI release is d
 
 Ready first:
 
-1. `version` in `pyproject.toml` (0.2.0 now; bump per release, bounded `>=x.y,<x.(y+1)` pins while the major is 0).
+1. `version` in `pyproject.toml` (0.3.0 now; bump per release, bounded `>=x.y,<x.(y+1)` pins while the major is 0).
 2. Licence: MIT, `LICENSE` at the root, `license = "MIT"` and `license-files = ["LICENSE"]` (both already set; the
    built wheel and sdist contain it).
 3. Classifiers: set (Alpha, Python 3.11 to 3.13, `Typing :: Typed`); `py.typed` ships in the wheel.
@@ -25,4 +25,4 @@ Ready first:
    environment name. Then add a `publish.yml` that builds with `python -m build` and uploads with
    `pypa/gh-action-pypi-publish` on a GitHub release. `ci.yml` intentionally has no publish step. Check how
    launch-runner publishes (it is on PyPI) and match it.
-6. Tag `v0.2.0` and create the release only when you want that publish to run.
+6. Tag `v0.3.0` and create the release only when you want that publish to run.

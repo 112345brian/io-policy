@@ -29,6 +29,16 @@ from io_policy._decision import (
     RequestRefused,
     eligibility,
 )
+from io_policy._ordered_lookup import (
+    AnswerKind,
+    Freshness,
+    LookupOutcome,
+    LookupPlan,
+    LookupResult,
+    LookupSource,
+    SourceAnswer,
+    resolve,
+)
 from io_policy._request_budget import RequestBudget
 
 __all__ = [
@@ -37,18 +47,26 @@ __all__ = [
     "AllowanceMode",
     "AllowanceReader",
     "AllowanceStatus",
+    "AnswerKind",
     "ClassPolicy",
     "Decision",
+    "Freshness",
     "Guard",
     "LocalAnswer",
     "LocalReadProbe",
     "LocalReadQuery",
+    "LookupOutcome",
+    "LookupPlan",
+    "LookupResult",
+    "LookupSource",
     "Outcome",
     "RequestBudget",
     "RequestFacts",
     "RequestRefused",
+    "SourceAnswer",
     "class_policy",
     "allowance_exempt",
     "allowance_limited",
     "eligibility",
+    "resolve",
 ]

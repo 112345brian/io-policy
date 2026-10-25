@@ -31,6 +31,11 @@ pip install "io-policy-engine @ git+https://github.com/112345brian/io-policy"
   request with the `ALLOWANCE_EXCEEDED` finding for the caller to record; `AllowanceMode.ENFORCE` refuses it. Only
   *limited* classes are affected: writes and `NEVER_STALE` classes are exempt (`ClassPolicy.allowance_exempt`), and
   small or correctness-critical reads are essential (`ClassPolicy.allowance_essential`): counted, never held back.
+- `Freshness` (`STALE_OK < VALIDATED < AUTHORITATIVE`), `SourceAnswer`, `LookupSource`, `LookupPlan`, `LookupResult`,
+  `LookupOutcome`, `resolve(plan, key, require)`: find one value through an ordered list of sources, local first. A
+  source whose best freshness is below `require` is never consulted; the walk stops at the first answer that meets
+  `require`; a miss ends it only when it was itself at least `VALIDATED`; otherwise the result is `UNAVAILABLE` with
+  the reasons, never a silent "not found".
 - `RequestBudget[C]`: thread-safe per-class byte accounting. `RequestRefused`: exception carrying a refused `Decision`.
 
 ## The pattern: a closed Enum whose values are `ClassPolicy`
@@ -63,6 +68,26 @@ allowance = Allowance(total_bytes=1000, window=timedelta(days=30), shares={Net.L
 status = allowance.status(Net.LISTING, Meter())
 facts = RequestFacts("GET", "items", Net.LISTING, local=probe.answer(query), allowance=status)
 decision = eligibility(facts)     # ALLOWED, SERVED_LOCAL, or REFUSED
+```
+
+## Ordered lookup example
+
+```python
+from io_policy import Freshness, LookupPlan, SourceAnswer, resolve
+
+class Snapshot:                     # a local copy checked against the store's change token
+    name, best_freshness = "snapshot", Freshness.VALIDATED
+    def find(self, key):
+        return SourceAnswer.found("cached", Freshness.VALIDATED, source=self.name) if key == "a" else             SourceAnswer.unavailable("no snapshot", source=self.name)
+
+class Store:                        # the authority itself
+    name, best_freshness = "store", Freshness.AUTHORITATIVE
+    def find(self, key):
+        return SourceAnswer.found("fresh", Freshness.AUTHORITATIVE, source=self.name)
+
+plan = LookupPlan((Snapshot(), Store()))
+resolve(plan, "a", Freshness.VALIDATED)   # FOUND from the snapshot; Store is never asked
+resolve(plan, "b", Freshness.VALIDATED)   # FOUND from the store after the snapshot could not tell
 ```
 
 ## Development

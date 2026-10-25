@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "io-policy-engine"
-version = "0.2.0"
+version = "0.3.0"
 description = "A dependency-free engine that decides which I/O requests may reach the network, under which guards and byte allowance."
 readme = "README.md"
 requires-python = ">=3.11"
